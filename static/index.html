@@ -1,0 +1,1174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>AI-Admin v2</title>
+<link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<script src="https://unpkg.com/element-plus/dist/index.full.min.js"></script>
+<script src="https://unpkg.com/@element-plus/icons-vue@2/dist/index.iife.min.js"></script>
+<style>
+body{margin:0;font-family:system-ui,-apple-system,sans-serif}
+#app{height:100vh;display:flex;flex-direction:column}
+.login-wrap{display:flex;align-items:center;justify-content:center;height:100vh;background:linear-gradient(135deg,#667eea,#764ba2)}
+.login-card{width:400px;padding:40px;background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.15)}
+.login-card h2{text-align:center;margin-bottom:30px;color:#303133}
+.layout{display:flex;height:100vh;overflow:hidden}
+.sidebar{width:240px;background:#1d1e2c;color:#fff;overflow-y:auto;flex-shrink:0;display:flex;flex-direction:column}
+.sidebar .logo{padding:18px 20px;font-size:18px;font-weight:700;border-bottom:1px solid rgba(255,255,255,.08);letter-spacing:1px}
+.sidebar .el-menu{border-right:none;flex:1}
+.main-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{height:48px;background:#fff;border-bottom:1px solid #e8e8e8;display:flex;align-items:center;justify-content:flex-end;padding:0 20px;gap:12px;flex-shrink:0}
+.topbar .user{color:#606266;font-size:13px}
+.content{flex:1;padding:20px;overflow-y:auto;background:#f5f6f8}
+.card-box{background:#fff;border-radius:8px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.04)}
+.stat-cards{display:flex;gap:16px;margin-bottom:20px}
+.stat-card{flex:1;background:#fff;border-radius:8px;padding:20px 24px;box-shadow:0 1px 4px rgba(0,0,0,.04);display:flex;align-items:center;gap:16px}
+.stat-card .icon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;color:#fff}
+.stat-card .num{font-size:28px;font-weight:700}
+.stat-card .label{color:#909399;font-size:13px;margin-top:2px}
+.chat-window{border:1px solid #e8e8e8;border-radius:8px;height:450px;display:flex;flex-direction:column}
+.chat-msgs{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
+.chat-msg{padding:10px 14px;border-radius:8px;max-width:80%;line-height:1.6}
+.chat-msg.user{align-self:flex-end;background:#409eff;color:#fff}
+.chat-msg.assistant{align-self:flex-start;background:#f0f2f5;color:#303133}
+.chat-input{display:flex;padding:12px;border-top:1px solid #e8e8e8;gap:8px}
+.chat-input input{flex:1}
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- Login -->
+  <div v-if="!token" class="login-wrap">
+    <div class="login-card">
+      <h2>AI-Admin 管理系统</h2>
+      <el-form :model="loginForm" :rules="loginRules" ref="loginRef">
+        <el-form-item prop="username">
+          <el-input v-model="loginForm.username" placeholder="用户名" size="large" prefix-icon="User"></el-input>
+        </el-form-item>
+        <el-form-item prop="password">
+          <el-input v-model="loginForm.password" type="password" placeholder="密码" size="large" prefix-icon="Lock" @keyup.enter="doLogin"></el-input>
+        </el-form-item>
+        <el-button type="primary" size="large" style="width:100%" @click="doLogin" :loading="loginLoading">登 录</el-button>
+      </el-form>
+      <p style="text-align:center;color:#909399;font-size:12px;margin-top:16px">默认账号: admin / admin123</p>
+    </div>
+  </div>
+
+  <!-- Main Layout -->
+  <div v-else class="layout">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="logo">⚡ AI-Admin</div>
+      <el-menu :default-active="currentMenu" background-color="#1d1e2c" text-color="#a0a0b0" active-text-color="#fff" @select="onMenuSelect" style="border-right:none">
+        <template v-for="m in flatMenus" :key="m.path">
+          <el-menu-item :index="m.path" v-if="!m.children || !m.children.length" style="padding-left:40px!important">
+            <span>{{ m.name }}</span>
+          </el-menu-item>
+          <el-sub-menu :index="m.path" v-else>
+            <template #title><span>{{ m.name }}</span></template>
+            <el-menu-item v-for="c in m.children" :key="c.path" :index="c.path">{{ c.name }}</el-menu-item>
+          </el-sub-menu>
+        </template>
+      </el-menu>
+    </div>
+
+    <!-- Main -->
+    <div class="main-wrap">
+      <div class="topbar">
+        <el-dropdown trigger="click" @command="onUserCommand">
+          <span class="user" style="cursor:pointer">👤 {{ username }} <template v-if="isSuperuser">(超管)</template></span>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="profile">个人信息</el-dropdown-item>
+              <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+      </div>
+      <div class="content">
+
+        <!-- Dashboard -->
+        <template v-if="currentPage==='dashboard'">
+          <h3 style="margin-top:0">仪表盘</h3>
+          <div class="stat-cards">
+            <div class="stat-card"><div class="icon" style="background:#409eff">👥</div><div><div class="num">{{stats.users}}</div><div class="label">用户数</div></div></div>
+            <div class="stat-card"><div class="icon" style="background:#67c23a">📋</div><div><div class="num">{{stats.logs}}</div><div class="label">今日日志</div></div></div>
+            <div class="stat-card"><div class="icon" style="background:#e6a23c">📁</div><div><div class="num">{{stats.files}}</div><div class="label">文件数</div></div></div>
+            <div class="stat-card"><div class="icon" style="background:#f56c6c">🤖</div><div><div class="num">{{stats.chats}}</div><div class="label">AI对话</div></div></div>
+          </div>
+        </template>
+
+        <!-- Users -->
+        <template v-if="currentPage==='/system/users'">
+          <div class="card-box">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+              <h3 style="margin:0">用户管理</h3>
+              <div style="display:flex;gap:8px">
+                <el-input v-model="userSearch" placeholder="搜索用户名/昵称/邮箱" style="width:240px" clearable @clear="loadUsers" @keyup.enter="loadUsers"></el-input>
+                <el-button type="primary" @click="showUserDialog(null)">新增用户</el-button>
+              </div>
+            </div>
+            <el-table :data="users" stripe v-loading="loading">
+              <el-table-column prop="username" label="用户名" width="120"></el-table-column>
+              <el-table-column prop="nickname" label="昵称" width="120"></el-table-column>
+              <el-table-column prop="email" label="邮箱"></el-table-column>
+              <el-table-column prop="phone" label="手机"></el-table-column>
+              <el-table-column prop="is_active" label="状态" width="80"><template #default="{row}"><el-tag :type="row.is_active?'success':'danger'" size="small">{{row.is_active?'启用':'禁用'}}</el-tag></template></el-table-column>
+              <el-table-column label="操作" width="200"><template #default="{row}">
+                <el-button size="small" @click="showUserDialog(row)">编辑</el-button>
+                <el-button size="small" @click="showRoleDialog(row)">角色</el-button>
+                <el-popconfirm title="确定删除?" @confirm="delUser(row.id)"><template #reference><el-button size="small" type="danger">删除</el-button></template></el-popconfirm>
+              </template></el-table-column>
+            </el-table>
+            <el-pagination style="margin-top:16px;justify-content:flex-end" layout="total,prev,pager,next" :total="userTotal" :page-size="10" @current-change="p=>loadUsers(p)"/>
+          </div>
+        </template>
+
+        <!-- Roles -->
+        <template v-if="currentPage==='/system/roles'">
+          <div class="card-box">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+              <h3 style="margin:0">角色管理</h3>
+              <el-button type="primary" @click="showRoleForm(null)">新增角色</el-button>
+            </div>
+            <el-table :data="roles" stripe v-loading="loading">
+              <el-table-column prop="name" label="角色名" width="150"></el-table-column>
+              <el-table-column prop="code" label="编码" width="120"></el-table-column>
+              <el-table-column prop="description" label="描述"></el-table-column>
+              <el-table-column label="操作" width="220"><template #default="{row}">
+                <el-button size="small" @click="showRoleForm(row)">编辑</el-button>
+                <el-button size="small" @click="showMenuAssign(row)">分配菜单</el-button>
+                <el-popconfirm title="确定删除?" @confirm="delRole(row.id)"><template #reference><el-button size="small" type="danger">删除</el-button></template></el-popconfirm>
+              </template></el-table-column>
+            </el-table>
+          </div>
+        </template>
+
+        <!-- Menus -->
+        <template v-if="currentPage==='/system/menus'">
+          <div class="card-box">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+              <h3 style="margin:0">菜单管理</h3>
+              <el-button type="primary" @click="showMenuForm(null)">新增菜单</el-button>
+            </div>
+            <el-table :data="menus" stripe row-key="id" default-expand-all v-loading="loading">
+              <el-table-column prop="name" label="名称" width="200"></el-table-column>
+              <el-table-column prop="menu_type" label="类型" width="80"><template #default="{row}"><el-tag size="small" :type="row.menu_type==='menu'?'':'info'">{{row.menu_type}}</el-tag></template></el-table-column>
+              <el-table-column prop="path" label="路由路径"></el-table-column>
+              <el-table-column prop="permission_code" label="权限码"></el-table-column>
+              <el-table-column prop="sort_order" label="排序" width="70"></el-table-column>
+              <el-table-column label="操作" width="180"><template #default="{row}">
+                <el-button size="small" @click="showMenuForm(row)">编辑</el-button>
+                <el-popconfirm title="确定删除?" @confirm="delMenu(row.id)"><template #reference><el-button size="small" type="danger">删除</el-button></template></el-popconfirm>
+              </template></el-table-column>
+            </el-table>
+          </div>
+        </template>
+
+        <!-- Logs -->
+        <template v-if="currentPage==='/monitor/logs'">
+          <!-- Main table -->
+          <div class="card-box">
+            <h3 style="margin-top:0">操作日志</h3>
+            <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+              <el-input v-model="logFilter.username" placeholder="用户名" style="width:130px" clearable></el-input>
+              <el-select v-model="logFilter.method" placeholder="请求方法" style="width:120px" clearable>
+                <el-option v-for="m in logMethods" :key="m" :label="m" :value="m"/>
+              </el-select>
+              <el-select v-model="logFilter.status_code" placeholder="状态码" style="width:150px" clearable>
+                <el-option v-for="s in logStatusCodes" :key="s.value" :label="s.label" :value="s.value"/>
+              </el-select>
+              <el-button type="primary" @click="loadLogs()">查询</el-button>
+              <el-button @click="resetLogFilter">重置</el-button>
+            </div>
+            <el-table :data="logs" stripe v-loading="loading">
+              <el-table-column prop="username" label="用户" width="100"></el-table-column>
+              <el-table-column label="请求" width="200"><template #default="{row}"><el-tag size="small" type="info">{{row.request_method}}</el-tag> {{row.request_url}}</template></el-table-column>
+              <el-table-column prop="ip_address" label="IP" width="140"></el-table-column>
+              <el-table-column prop="response_status" label="状态码" width="80"><template #default="{row}"><el-tag :type="row.response_status>=400?'danger':'success'" size="small">{{row.response_status}}</el-tag></template></el-table-column>
+              <el-table-column prop="duration_ms" label="耗时(ms)" width="90"></el-table-column>
+              <el-table-column prop="created_at" label="时间" width="170"><template #default="{row}">{{formatTime(row.created_at)}}</template></el-table-column>
+              <el-table-column label="操作" width="160"><template #default="{row}">
+                <el-button size="small" @click="showLogDetail(row.id)">详情</el-button>
+                <el-popconfirm title="移入回收站?" @confirm="delLog(row.id)"><template #reference><el-button size="small" type="warning">回收</el-button></template></el-popconfirm>
+              </template></el-table-column>
+            </el-table>
+            <el-pagination style="margin-top:16px;justify-content:flex-end" layout="total,prev,pager,next" :total="logTotal" :page-size="10" :current-page="currentLogPage" @current-change="p=>loadLogs(p)"/>
+          </div>
+
+          <!-- Recycle Bin -->
+          <div class="card-box" style="margin-top:20px">
+            <h3 style="margin-top:0;color:#909399">🗑 回收站</h3>
+            <el-table :data="recycleLogs" stripe v-loading="recycleLoading" empty-text="回收站为空">
+              <el-table-column prop="username" label="用户" width="100"></el-table-column>
+              <el-table-column label="请求" width="200"><template #default="{row}"><el-tag size="small" type="info">{{row.request_method}}</el-tag> {{row.request_url}}</template></el-table-column>
+              <el-table-column prop="ip_address" label="IP" width="140"></el-table-column>
+              <el-table-column prop="response_status" label="状态码" width="80"><template #default="{row}"><el-tag :type="row.response_status>=400?'danger':'success'" size="small">{{row.response_status}}</el-tag></template></el-table-column>
+              <el-table-column prop="duration_ms" label="耗时(ms)" width="90"></el-table-column>
+              <el-table-column prop="deleted_at" label="删除时间" width="170"><template #default="{row}">{{formatTime(row.deleted_at)}}</template></el-table-column>
+              <el-table-column prop="deleted_by" label="删除人" width="100"></el-table-column>
+              <el-table-column label="操作" width="200"><template #default="{row}">
+                <el-button size="small" type="success" @click="restoreLog(row.id)">恢复</el-button>
+                <el-popconfirm title="彻底删除?无法恢复!" @confirm="permanentDelLog(row.id)"><template #reference><el-button size="small" type="danger">彻底删除</el-button></template></el-popconfirm>
+              </template></el-table-column>
+            </el-table>
+            <el-pagination style="margin-top:16px;justify-content:flex-end" layout="total,prev,pager,next" :total="recycleLogTotal" :page-size="10" :current-page="recycleLogPage" @current-change="p=>loadRecycleLogs(p)"/>
+          </div>
+        </template>
+
+        <!-- Files -->
+        <template v-if="currentPage==='/monitor/files'">
+          <div class="card-box">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+              <h3 style="margin:0">文件管理</h3>
+              <el-upload :show-file-list="false" :http-request="uploadFile" :before-upload="beforeUpload">
+                <el-button type="primary">上传文件</el-button>
+              </el-upload>
+            </div>
+            <el-table :data="files" stripe v-loading="loading">
+              <el-table-column prop="original_name" label="文件名"></el-table-column>
+              <el-table-column prop="mime_type" label="类型" width="150"></el-table-column>
+              <el-table-column label="大小" width="100"><template #default="{row}">{{(row.file_size/1024).toFixed(1)}} KB</template></el-table-column>
+              <el-table-column prop="download_count" label="下载次数" width="100"></el-table-column>
+              <el-table-column prop="created_at" label="上传时间" width="170"></el-table-column>
+              <el-table-column label="操作" width="160"><template #default="{row}">
+                <el-button size="small" @click="downloadFile(row)">下载</el-button>
+                <el-popconfirm title="确定删除?" @confirm="delFile(row.id)"><template #reference><el-button size="small" type="danger">删除</el-button></template></el-popconfirm>
+              </template></el-table-column>
+            </el-table>
+            <el-pagination style="margin-top:16px;justify-content:flex-end" layout="total,prev,pager,next" :total="fileTotal" :page-size="10" @current-change="p=>loadFiles(p)"/>
+          </div>
+        </template>
+
+        <!-- AI Chat -->
+        <template v-if="currentPage==='/ai/chat'">
+          <div class="card-box">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+              <h3 style="margin:0">AI 智能助手</h3>
+              <el-button size="small" @click="clearChat" :disabled="chatLoading">清空对话</el-button>
+            </div>
+            <div class="chat-window">
+              <div class="chat-msgs" ref="chatMsgsRef" @dragover.prevent="chatDropActive=true" @dragleave.prevent="chatDropActive=false" @drop.prevent="onChatDrop"
+                   :style="chatDropActive?'border:2px dashed #409eff':''">
+                <div v-for="(m,i) in chatMsgs" :key="i" :class="'chat-msg '+m.role">
+                  {{m.content}}
+                  <div v-if="m.attachments&&m.attachments.length" style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+                    <div v-for="a in m.attachments" :key="a.id" style="background:rgba(0,0,0,.06);border-radius:6px;padding:6px 10px;font-size:12px;display:flex;align-items:center;gap:6px">
+                      <span>{{isImageFile(a)?'🖼':'📄'}}</span>
+                      <span>{{a.original_name}}</span>
+                      <span style="color:#909399">{{(a.file_size/1024).toFixed(1)}}KB</span>
+                    </div>
+                  </div>
+                </div>
+                <div v-if="chatLoading" class="chat-msg assistant" style="color:#909399">AI 思考中...</div>
+              </div>
+              <div v-if="attachedFiles.length" style="display:flex;gap:6px;padding:6px 12px;flex-wrap:wrap">
+                <el-tag v-for="(f,i) in attachedFiles" :key="f.id" closable size="small" @close="attachedFiles.splice(i,1)">
+                  {{isImageFile(f) ? '🖼' : '📄'}} {{f.original_name}}
+                </el-tag>
+              </div>
+              <div class="chat-input">
+                <el-button @click="openFilePicker" icon="Paperclip" circle size="small" :disabled="chatLoading"></el-button>
+                <el-input v-model="chatInput" placeholder="输入消息..." @keyup.enter="sendChat" :disabled="chatLoading"></el-input>
+                <el-select v-model="chatSession" style="width:130px"><el-option label="默认会话" value="default"/></el-select>
+                <el-button type="primary" @click="sendChat" :loading="chatLoading">发送</el-button>
+              </div>
+            </div>
+          </div>
+          <!-- File Picker Dialog -->
+          <el-dialog v-model="filePickerVisible" title="选择文件" width="520px" top="8vh">
+            <el-input v-model="filePickerSearch" placeholder="搜索文件名..." clearable size="small" style="margin-bottom:8px"></el-input>
+            <el-table :data="filteredFilePickerList" @selection-change="onFilePickerSelect" size="small" height="260">
+              <el-table-column type="selection" width="40"></el-table-column>
+              <el-table-column prop="original_name" label="文件名"></el-table-column>
+              <el-table-column label="大小" width="90">
+                <template #default="{row}">{{(row.file_size/1024).toFixed(0)}}KB</template>
+              </el-table-column>
+            </el-table>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+              <span style="font-size:12px;color:#909399">共 {{filePickerTotal}} 条</span>
+              <el-pagination small layout="prev,pager,next" :total="filePickerTotal" :page-size="10" @current-change="loadFilePickerList"/>
+            </div>
+            <template #footer>
+              <el-button @click="filePickerVisible=false">取消</el-button>
+              <el-button type="primary" @click="confirmFilePicker">确定({{filePickerSelected.length}})</el-button>
+            </template>
+          </el-dialog>
+        </template>
+
+        <!-- NL2SQL -->
+        <template v-if="currentPage==='/ai/nl2sql'">
+          <div class="card-box">
+            <h3 style="margin-top:0">NL2SQL 自然语言查询</h3>
+            <div style="display:flex;gap:8px;margin-bottom:16px">
+              <el-input v-model="nl2sqlQuery" placeholder="例如：查询用户表中的所有数据" style="flex:1" @keyup.enter="runNl2sql"></el-input>
+              <el-button type="primary" @click="runNl2sql" :loading="nl2sqlLoading">查询</el-button>
+            </div>
+            <div v-if="nl2sqlResult">
+              <el-alert :title="'生成SQL: '+nl2sqlResult.generated_sql" type="info" :closable="false" style="margin-bottom:12px"/>
+              <el-table :data="nl2sqlResult.rows" border stripe><el-table-column v-for="(col,i) in nl2sqlResult.columns" :key="i" :prop="i.toString()" :label="col"/></el-table>
+              <p style="color:#909399;font-size:12px;margin-top:8px">共 {{nl2sqlResult.row_count}} 行，耗时 {{nl2sqlResult.execution_time_ms}}ms</p>
+            </div>
+            <div v-if="nl2sqlError" style="color:#f56c6c">{{nl2sqlError}}</div>
+          </div>
+        </template>
+
+        <!-- CodeGen -->
+        <template v-if="currentPage==='/ai/codegen'">
+          <div class="card-box">
+            <h3 style="margin-top:0">代码生成器</h3>
+            <div style="display:flex;gap:8px;margin-bottom:16px">
+              <el-select v-model="codegenTable" placeholder="选择数据库表" style="width:300px" @change="runCodegen">
+                <el-option v-for="t in codegenTables" :key="t" :label="t" :value="t"/>
+              </el-select>
+            </div>
+            <div v-if="codegenResult">
+              <h4>SQLAlchemy Model</h4>
+              <pre style="background:#1e1e2e;color:#d4d4d4;padding:16px;border-radius:8px;overflow-x:auto;font-size:13px">{{codegenResult.model}}</pre>
+              <h4>Pydantic Schema</h4>
+              <pre style="background:#1e1e2e;color:#d4d4d4;padding:16px;border-radius:8px;overflow-x:auto;font-size:13px">{{codegenResult.schema}}</pre>
+            </div>
+          </div>
+        </template>
+
+        <!-- Log Analysis -->
+        <template v-if="currentPage==='/ai/log-analysis'">
+          <div class="card-box">
+            <h3 style="margin-top:0">AI 日志分析</h3>
+            <p style="color:#909399;font-size:13px;margin-bottom:20px">AI 自动分析系统操作日志，检测异常请求、错误趋势和潜在安全隐患，帮助快速定位问题。</p>
+
+            <!-- Quick Stats -->
+            <div class="stat-cards" style="margin-bottom:20px">
+              <div class="stat-card"><div class="icon" style="background:#409eff">📊</div><div><div class="num">{{logAnalysisStats.total}}</div><div class="label">总请求数</div></div></div>
+              <div class="stat-card"><div class="icon" style="background:#f56c6c">⚠️</div><div><div class="num">{{logAnalysisStats.errors}}</div><div class="label">异常请求 (≥400)</div></div></div>
+              <div class="stat-card"><div class="icon" style="background:#e6a23c">⏱️</div><div><div class="num">{{logAnalysisStats.avgDuration}}ms</div><div class="label">平均响应耗时</div></div></div>
+              <div class="stat-card"><div class="icon" style="background:#67c23a">🕐</div><div><div class="num">{{logAnalysisHours}}h</div><div class="label">统计时间范围</div></div></div>
+            </div>
+
+            <div style="margin-bottom:16px">
+              <span style="font-size:13px;color:#606266;margin-right:8px">分析最近</span>
+              <el-input-number v-model="logAnalysisHours" :min="1" :max="168" size="small" style="width:130px"/>
+              <span style="font-size:13px;color:#606266;margin-left:8px">小时的操作日志</span>
+            </div>
+            <div style="margin-bottom:20px">
+              <el-button type="primary" size="large" @click="runLogAnalysis">开始 AI 分析</el-button>
+            </div>
+
+            <!-- Loading -->
+            <div v-if="logAnalysisLoading" style="text-align:center;padding:30px 0;color:#909399">
+              <p style="font-size:15px">🤖 AI 正在分析日志数据，请稍候...</p>
+            </div>
+
+            <!-- Result Box -->
+            <div v-if="logAnalysisResult" style="border:1px solid #dcdfe6;border-radius:8px;overflow:hidden;margin-top:16px">
+              <div style="background:#f5f7fa;padding:10px 20px;font-size:13px;font-weight:600;color:#303133;border-bottom:1px solid #dcdfe6">📋 分析结果</div>
+              <div style="white-space:pre-wrap;line-height:1.9;padding:20px;font-size:14px;max-height:450px;overflow-y:auto">{{logAnalysisResult}}</div>
+            </div>
+
+            <!-- Empty placeholder -->
+            <div v-if="!logAnalysisResult && !logAnalysisLoading" style="text-align:center;padding:30px 0;color:#c0c4cc">
+              <div style="font-size:48px;margin-bottom:12px">📋</div>
+              <p>点击上方"开始 AI 分析"，查看 AI 对系统日志的深度洞察</p>
+            </div>
+          </div>
+        </template>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- User Dialog -->
+  <el-dialog v-model="userDialog.visible" :title="userDialog.isEdit?'编辑用户':'新增用户'" width="480px">
+    <el-form :model="userDialog.form" label-width="80px">
+      <el-form-item label="用户名"><el-input v-model="userDialog.form.username" :disabled="userDialog.isEdit"></el-input></el-form-item>
+      <el-form-item label="密码"><el-input v-model="userDialog.form.password" type="password" :placeholder="userDialog.isEdit?'留空不修改':''"></el-input></el-form-item>
+      <el-form-item label="昵称"><el-input v-model="userDialog.form.nickname"></el-input></el-form-item>
+      <el-form-item label="邮箱"><el-input v-model="userDialog.form.email"></el-input></el-form-item>
+      <el-form-item label="手机"><el-input v-model="userDialog.form.phone"></el-input></el-form-item>
+      <el-form-item label="状态"><el-switch v-model="userDialog.form.is_active"/></el-form-item>
+    </el-form>
+    <template #footer><el-button @click="userDialog.visible=false">取消</el-button><el-button type="primary" @click="saveUser" :loading="saving">保存</el-button></template>
+  </el-dialog>
+
+  <!-- Role Dialog -->
+  <el-dialog v-model="roleDialog.visible" title="分配角色" width="420px">
+    <el-checkbox-group v-model="roleDialog.checked">
+      <el-checkbox v-for="r in allRoles" :key="r.id" :label="r.id" :value="r.id">{{r.name}} ({{r.code}})</el-checkbox>
+    </el-checkbox-group>
+    <template #footer><el-button @click="roleDialog.visible=false">取消</el-button><el-button type="primary" @click="saveUserRoles" :loading="saving">保存</el-button></template>
+  </el-dialog>
+
+  <!-- Role Form Dialog -->
+  <el-dialog v-model="roleFormDialog.visible" :title="roleFormDialog.isEdit?'编辑角色':'新增角色'" width="450px">
+    <el-form :model="roleFormDialog.form" label-width="80px">
+      <el-form-item label="名称"><el-input v-model="roleFormDialog.form.name"></el-input></el-form-item>
+      <el-form-item label="编码"><el-input v-model="roleFormDialog.form.code" :disabled="roleFormDialog.isEdit"></el-input></el-form-item>
+      <el-form-item label="描述"><el-input v-model="roleFormDialog.form.description"></el-input></el-form-item>
+    </el-form>
+    <template #footer><el-button @click="roleFormDialog.visible=false">取消</el-button><el-button type="primary" @click="saveRole" :loading="saving">保存</el-button></template>
+  </el-dialog>
+
+  <!-- Menu Assign Dialog -->
+  <el-dialog v-model="menuAssignDialog.visible" title="分配菜单权限" width="400px">
+    <el-tree :data="menus" show-checkbox node-key="id" default-checked-keys="" ref="menuTreeRef" :props="{label:'name',children:'children'}"></el-tree>
+    <template #footer><el-button @click="menuAssignDialog.visible=false">取消</el-button><el-button type="primary" @click="saveRoleMenus" :loading="saving">保存</el-button></template>
+  </el-dialog>
+
+  <!-- Menu Form Dialog -->
+  <el-dialog v-model="menuFormDialog.visible" :title="menuFormDialog.isEdit?'编辑菜单':'新增菜单'" width="480px">
+    <el-form :model="menuFormDialog.form" label-width="90px">
+      <el-form-item label="上级菜单"><el-select v-model="menuFormDialog.form.parent_id" placeholder="无" clearable style="width:100%"><el-option v-for="m in menus" :key="m.id" :label="m.name" :value="m.id"/></el-select></el-form-item>
+      <el-form-item label="名称"><el-input v-model="menuFormDialog.form.name"></el-input></el-form-item>
+      <el-form-item label="类型"><el-select v-model="menuFormDialog.form.menu_type"><el-option label="菜单" value="menu"/><el-option label="按钮" value="button"/><el-option label="API" value="api"/></el-select></el-form-item>
+      <el-form-item label="路由"><el-input v-model="menuFormDialog.form.path"></el-input></el-form-item>
+      <el-form-item label="权限码"><el-input v-model="menuFormDialog.form.permission_code"></el-input></el-form-item>
+      <el-form-item label="排序"><el-input-number v-model="menuFormDialog.form.sort_order"/></el-form-item>
+      <el-form-item label="可见"><el-switch v-model="menuFormDialog.form.is_visible"/></el-form-item>
+    </el-form>
+    <template #footer><el-button @click="menuFormDialog.visible=false">取消</el-button><el-button type="primary" @click="saveMenu" :loading="saving">保存</el-button></template>
+  </el-dialog>
+
+  <!-- Log Detail Dialog -->
+  <el-dialog v-model="logDetail.visible" title="日志详情" width="600px">
+    <template v-if="logDetail.data">
+      <el-descriptions :column="2" border>
+        <el-descriptions-item label="用户">{{logDetail.data.username||'-'}}</el-descriptions-item>
+        <el-descriptions-item label="IP">{{logDetail.data.ip_address||'-'}}</el-descriptions-item>
+        <el-descriptions-item label="方法">{{logDetail.data.request_method}}</el-descriptions-item>
+        <el-descriptions-item label="状态码">{{logDetail.data.response_status}}</el-descriptions-item>
+        <el-descriptions-item label="URL" :span="2">{{logDetail.data.request_url}}</el-descriptions-item>
+        <el-descriptions-item label="耗时">{{logDetail.data.duration_ms}}ms</el-descriptions-item>
+        <el-descriptions-item label="时间">{{logDetail.data.created_at}}</el-descriptions-item>
+        <el-descriptions-item label="参数" :span="2"><pre style="max-height:150px;overflow:auto;font-size:12px">{{JSON.stringify(logDetail.data.request_params,null,2)}}</pre></el-descriptions-item>
+        <el-descriptions-item label="请求体" :span="2"><pre style="max-height:150px;overflow:auto;font-size:12px">{{JSON.stringify(logDetail.data.request_body,null,2)}}</pre></el-descriptions-item>
+      </el-descriptions>
+    </template>
+  </el-dialog>
+
+  <!-- Profile Dialog -->
+  <el-dialog v-model="profileDialog.visible" title="个人信息" width="500px">
+    <el-tabs v-model="profileDialog.activeTab">
+      <el-tab-pane label="基本资料" name="info">
+        <el-form :model="profileDialog.form" label-width="80px" style="margin-top:12px">
+          <el-form-item label="用户名">
+            <el-input :model-value="profileDialog.form.username" disabled></el-input>
+          </el-form-item>
+          <el-form-item label="昵称">
+            <el-input v-model="profileDialog.form.nickname" placeholder="请输入昵称"></el-input>
+          </el-form-item>
+          <el-form-item label="邮箱">
+            <el-input v-model="profileDialog.form.email" placeholder="请输入邮箱"></el-input>
+          </el-form-item>
+          <el-form-item label="手机">
+            <el-input v-model="profileDialog.form.phone" placeholder="请输入手机号"></el-input>
+          </el-form-item>
+          <el-form-item label="角色">
+            <span style="color:#909399;font-size:13px">{{profileDialog.form.is_superuser?'超级管理员':'普通用户'}}</span>
+          </el-form-item>
+          <el-form-item label="注册时间">
+            <span style="color:#909399;font-size:13px">{{profileDialog.form.created_at||'-'}}</span>
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" @click="saveProfile" :loading="profileDialog.saving">保存</el-button>
+          </el-form-item>
+        </el-form>
+      </el-tab-pane>
+      <el-tab-pane label="修改密码" name="password">
+        <el-form :model="profileDialog.pwdForm" label-width="100px" style="margin-top:12px">
+          <el-form-item label="旧密码">
+            <el-input v-model="profileDialog.pwdForm.old_password" type="password" show-password></el-input>
+          </el-form-item>
+          <el-form-item label="新密码">
+            <el-input v-model="profileDialog.pwdForm.new_password" type="password" show-password></el-input>
+          </el-form-item>
+          <el-form-item label="确认新密码">
+            <el-input v-model="profileDialog.pwdForm.confirm_password" type="password" show-password></el-input>
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" @click="changeMyPassword" :loading="profileDialog.pwdSaving">修改密码</el-button>
+          </el-form-item>
+        </el-form>
+      </el-tab-pane>
+    </el-tabs>
+  </el-dialog>
+
+</div>
+
+<script>
+const {createApp,ref,reactive,computed,watch,nextTick,onMounted} = Vue
+
+const app = createApp({
+  setup(){
+    const BASE = '/api/v1'
+    const token = ref(localStorage.getItem('token')||'')
+    const username = ref(localStorage.getItem('username')||'')
+    const isSuperuser = ref(false)
+    const loading = ref(false)
+    const saving = ref(false)
+    const loginRef = ref(null)
+    const loginForm = reactive({username:'admin',password:'admin123'})
+    const loginRules = {username:[{required:true,message:'请输入用户名'}],password:[{required:true,message:'请输入密码'}]}
+    const loginLoading = ref(false)
+
+    const menus = ref([])
+    const flatMenus = computed(()=>{
+      const flatten = (items)=>{let r=[];for(let i of items){if(i.menu_type==='menu'&&i.is_visible){r.push({...i,children:i.children?flatten(i.children):[]})}}return r}
+      return flatten(menus.value)
+    })
+    const currentMenu = ref('dashboard')
+    const currentPage = ref('dashboard')
+
+    // Stats
+    const stats = reactive({users:0,logs:0,files:0,chats:0})
+
+    // Users
+    const users = ref([])
+    const userTotal = ref(0)
+    const userSearch = ref('')
+    const userDialog = reactive({visible:false,isEdit:false,form:{username:'',password:'',nickname:'',email:'',phone:'',is_active:true}})
+
+    // Roles
+    const roles = ref([])
+    const allRoles = ref([])
+    const roleDialog = reactive({visible:false,userId:null,checked:[]})
+    const roleFormDialog = reactive({visible:false,isEdit:false,form:{name:'',code:'',description:''}})
+
+    // Menu assign
+    const menuAssignDialog = reactive({visible:false,roleId:null})
+    const menuTreeRef = ref(null)
+    const menuFormDialog = reactive({visible:false,isEdit:false,form:{parent_id:null,name:'',menu_type:'menu',path:'',permission_code:'',sort_order:0,is_visible:true}})
+
+    // Profile
+    const profileDialog = reactive({
+      visible:false, activeTab:'info', saving:false, pwdSaving:false,
+      form:{username:'',nickname:'',email:'',phone:'',is_superuser:false,created_at:''},
+      pwdForm:{old_password:'',new_password:'',confirm_password:''}
+    })
+
+    // Logs
+    const logMethods = ['GET', 'POST', 'PUT', 'DELETE']
+    const logStatusCodes = [
+      {label:'200 成功', value:200},
+      {label:'400 请求错误', value:400},
+      {label:'403 禁止访问', value:403},
+      {label:'500 服务器错误', value:500}
+    ]
+    const logs = ref([])
+    const logTotal = ref(0)
+    const currentLogPage = ref(1)
+    const logFilter = reactive({username:'',method:'',status_code:null})
+    const logDetail = reactive({visible:false,data:null})
+    const recycleLogs = ref([])
+    const recycleLogTotal = ref(0)
+    const recycleLogPage = ref(1)
+    const recycleLoading = ref(false)
+
+    // Files
+    const files = ref([])
+    const fileTotal = ref(0)
+
+    // AI Chat
+    const chatMsgs = ref([])
+    const chatInput = ref('')
+    const chatSession = ref('default')
+    const chatLoading = ref(false)
+    const chatMsgsRef = ref(null)
+
+    // Chat file attachments
+    const attachedFiles = ref([])
+    const filePickerVisible = ref(false)
+    const filePickerList = ref([])
+    const filePickerTotal = ref(0)
+    const filePickerPage = ref(1)
+    const filePickerSearch = ref('')
+    const filePickerSelected = ref([])
+    const chatDropActive = ref(false)
+
+    async function loadChatHistory(){
+      try{
+        const d=await api('/ai/chat/history?session_id='+chatSession.value)
+        chatMsgs.value=(d.data||[]).map(h=>({role:h.role,content:h.content,attachments:h.attachments||null}))
+      }catch(e){}
+    }
+
+    async function clearChat(){
+      try{
+        await api('/ai/chat/history?session_id='+chatSession.value, {method:'DELETE'})
+        chatMsgs.value = []
+        ElementPlus.ElMessage.success('对话已清空')
+      }catch(e){
+        ElementPlus.ElMessage.error('清空失败: '+e.message)
+      }
+    }
+
+    watch(chatSession, ()=>{ loadChatHistory() })
+
+    async function sendChat(){
+      const msg = chatInput.value.trim()
+      const hasFiles = attachedFiles.value.length > 0
+      if(!msg && !hasFiles) return
+      chatLoading.value = true
+      const message = msg || '请分析以下文件'
+      const attachmentsForMsg = attachedFiles.value.map(f=>({
+        id: f.id, original_name: f.original_name,
+        file_size: f.file_size, mime_type: f.mime_type, file_extension: f.file_extension
+      }))
+      chatMsgs.value.push({role:'user', content:message, attachments:attachmentsForMsg},{role:'assistant', content:''})
+      attachedFiles.value = []
+      chatInput.value = ''
+      const idx = chatMsgs.value.length - 1
+      let reply = ''
+      try{
+        const body = {
+          message: message,
+          session_id: chatSession.value,
+          stream: false,
+        }
+        if(attachmentsForMsg.length) body.file_ids = attachmentsForMsg.map(a=>a.id)
+        const d = await api('/ai/chat',{method:'POST',body})
+        if(d && d.data && typeof d.data.reply === 'string'){
+          reply = d.data.reply
+          if(!reply) reply = '(AI 返回了空内容)'
+        } else {
+          reply = '错误: 响应格式异常'
+        }
+      }catch(e){reply='错误: '+e.message}
+      chatMsgs.value[idx]={role:'assistant',content:reply}
+      chatLoading.value=false
+      nextTick(()=>{const el=document.querySelector('.chat-msgs');if(el)el.scrollTop=el.scrollHeight})
+    }
+    // File helpers
+    function isImageFile(f){
+      const ext = (f.file_extension||'').toLowerCase()
+      return ['png','jpg','jpeg','gif','webp'].includes(ext)
+    }
+    const filteredFilePickerList = computed(()=>{
+      if(!filePickerSearch.value) return filePickerList.value
+      const s = filePickerSearch.value.toLowerCase()
+      return filePickerList.value.filter(f=>f.original_name.toLowerCase().includes(s))
+    })
+    function onFilePickerSelect(rows){ filePickerSelected.value = rows }
+    async function loadFilePickerList(page){
+      if(!page) page = filePickerPage.value
+      else filePickerPage.value = page
+      try{
+        const d = await api('/files?page='+page+'&page_size=10')
+        filePickerList.value = d.data.items
+        filePickerTotal.value = d.data.pagination.total
+      }catch(e){}
+    }
+    function openFilePicker(){
+      filePickerSelected.value = []
+      filePickerVisible.value = true
+      loadFilePickerList(1)
+    }
+    function confirmFilePicker(){
+      for(const f of filePickerSelected.value){
+        if(!attachedFiles.value.find(af=>af.id===f.id)){
+          attachedFiles.value.push({...f})
+        }
+      }
+      filePickerVisible.value = false
+    }
+    async function onChatDrop(event){
+      chatDropActive.value = false
+      const files = event.dataTransfer.files
+      if(!files||!files.length) return
+      for(const file of files){
+        if(file.size > 10*1024*1024){
+          ElementPlus.ElMessage.error(file.name+' 超过10MB限制')
+          continue
+        }
+        try{
+          const form = new FormData()
+          form.append('file', file)
+          const h = {Authorization:'Bearer '+token.value}
+          const r = await fetch(BASE+'/files/upload',{method:'POST',headers:h,body:form})
+          const d = await r.json()
+          if(d.code===200&&d.data){
+            attachedFiles.value.push(d.data)
+          }else{
+            ElementPlus.ElMessage.error(d.message||'上传失败')
+          }
+        }catch(e){
+          ElementPlus.ElMessage.error(file.name+' 上传失败: '+e.message)
+        }
+      }
+    }
+
+    const nl2sqlQuery = ref('')
+    const nl2sqlResult = ref(null)
+    const nl2sqlError = ref('')
+    const nl2sqlLoading = ref(false)
+
+    // CodeGen
+    const codegenTables = ref([])
+    const codegenTable = ref('')
+    const codegenResult = ref(null)
+
+    // Log Analysis
+    const logAnalysisHours = ref(24)
+    const logAnalysisResult = ref('')
+    const logAnalysisLoading = ref(false)
+    const logAnalysisStats = reactive({total:0, errors:0, avgDuration:0})
+
+    function headers(){
+      const h = {'Content-Type':'application/json'}
+      if(token.value) h['Authorization'] = 'Bearer '+token.value
+      return h
+    }
+
+    function api(path, opts={}){
+      const url = path.startsWith('http')?path:BASE+path
+      const h = {...headers(),...(opts.headers||{})}
+      if(opts.body&&h['Content-Type']==='application/json')opts.body=JSON.stringify(opts.body)
+      return fetch(url,{...opts,headers:h}).then(async r=>{
+        if(r.status===401){doLogout();throw new Error('Unauthorized')}
+        let data
+        try{data=await r.json()}catch(e){data=null}
+        if(r.ok&&data&&data.code===200)return data
+        throw new Error(data?.message||r.statusText)
+      })
+    }
+
+    // Auth
+    async function doLogin(){
+      if(!loginRef.value)return
+      await loginRef.value.validate(async(ok)=>{if(!ok)return
+        loginLoading.value=true
+        try{
+          const data = await api('/auth/login',{method:'POST',body:{username:loginForm.username,password:loginForm.password}})
+          token.value = data.data.access_token
+          username.value = loginForm.username
+          isSuperuser.value = data.data.is_superuser||false
+          localStorage.setItem('token',token.value)
+          localStorage.setItem('username',username.value)
+          await loadMenus()
+          currentPage.value='dashboard'
+          loadDashboard()
+        }catch(e){ElementPlus.ElMessage.error(e.message)}
+        finally{loginLoading.value=false}
+      })
+    }
+    function doLogout(){
+      api('/auth/logout',{method:'POST'}).catch(()=>{})
+      token.value = ''
+      username.value = ''
+      localStorage.clear()
+    }
+
+    function onUserCommand(cmd){
+      if(cmd==='profile') showProfile()
+      else if(cmd==='logout') doLogout()
+    }
+
+    async function showProfile(){
+      try{
+        const d=await api('/auth/me')
+        Object.assign(profileDialog.form,{
+          username:d.data.username||'',
+          nickname:d.data.nickname||'',
+          email:d.data.email||'',
+          phone:d.data.phone||'',
+          is_superuser:d.data.is_superuser||false,
+          created_at:d.data.created_at||''
+        })
+        profileDialog.pwdForm={old_password:'',new_password:'',confirm_password:''}
+        profileDialog.activeTab='info'
+        profileDialog.visible=true
+      }catch(e){ElementPlus.ElMessage.error(e.message)}
+    }
+
+    async function saveProfile(){
+      profileDialog.saving=true
+      try{
+        const body={}
+        for(const k of ['nickname','email','phone']){
+          if(profileDialog.form[k]) body[k]=profileDialog.form[k]
+        }
+        await api('/auth/me',{method:'PUT',body})
+        username.value=profileDialog.form.username
+        localStorage.setItem('username',profileDialog.form.username)
+        ElementPlus.ElMessage.success('保存成功')
+        profileDialog.visible=false
+      }catch(e){ElementPlus.ElMessage.error(e.message)}
+      finally{profileDialog.saving=false}
+    }
+
+    async function changeMyPassword(){
+      if(profileDialog.pwdForm.new_password!==profileDialog.pwdForm.confirm_password){
+        ElementPlus.ElMessage.error('两次输入的新密码不一致')
+        return
+      }
+      profileDialog.pwdSaving=true
+      try{
+        await api('/auth/me/password',{method:'PUT',body:{
+          old_password:profileDialog.pwdForm.old_password,
+          new_password:profileDialog.pwdForm.new_password
+        }})
+        ElementPlus.ElMessage.success('密码修改成功，请重新登录')
+        profileDialog.visible=false
+        token.value=''
+        username.value=''
+        localStorage.clear()
+      }catch(e){ElementPlus.ElMessage.error(e.message)}
+      finally{profileDialog.pwdSaving=false}
+    }
+
+    // Menus
+    async function loadMenus(){
+      try{const d=await api('/menus/user');menus.value=d.data||[]}catch(e){}
+    }
+
+    // Dashboard
+    async function loadDashboard(){
+      try{const d=await api('/users',{method:'GET'});stats.users=d.data?.pagination?.total||0}catch(e){}
+      try{const d=await api('/logs',{method:'GET'});stats.logs=d.data?.pagination?.total||0}catch(e){}
+      try{const d=await api('/files',{method:'GET'});stats.files=d.data?.pagination?.total||0}catch(e){}
+    }
+
+    // Users
+    async function loadUsers(page=1){
+      loading.value=true
+      try{
+        let url = '/users?page='+page+'&page_size=10'
+        if(userSearch.value)url+='&keyword='+encodeURIComponent(userSearch.value)
+        const d=await api(url)
+        users.value=d.data.items
+        userTotal.value=d.data.pagination.total
+      }catch(e){ElementPlus.ElMessage.error(e.message)}
+      finally{loading.value=false}
+    }
+    function showUserDialog(row){
+      if(row){
+        userDialog.isEdit=true
+        userDialog.form={...row,password:''}
+      }else{
+        userDialog.isEdit=false
+        userDialog.form={username:'',password:'',nickname:'',email:'',phone:'',is_active:true}
+      }
+      userDialog.visible=true
+    }
+    async function saveUser(){
+      saving.value=true
+      try{
+        const body = {...userDialog.form}
+        if(userDialog.isEdit){if(!body.password)delete body.password;delete body.username}
+        if(userDialog.isEdit)await api('/users/'+userDialog.form.id,{method:'PUT',body})
+        else await api('/users',{method:'POST',body})
+        userDialog.visible=false
+        loadUsers()
+        ElementPlus.ElMessage.success('保存成功')
+      }catch(e){ElementPlus.ElMessage.error(e.message)}
+      finally{saving.value=false}
+    }
+    async function delUser(id){
+      try{await api('/users/'+id,{method:'DELETE'});loadUsers();ElementPlus.ElMessage.success('删除成功')}
+      catch(e){ElementPlus.ElMessage.error(e.message)}
+    }
+    async function showRoleDialog(row){
+      roleDialog.userId=row.id
+      roleDialog.checked=[]
+      try{
+        const d=await api('/roles/all')
+        allRoles.value=d.data||[]
+        // Check which roles user has by loading user detail
+        // Simplified: just show all unchecked
+      }catch(e){}
+      roleDialog.visible=true
+    }
+    async function saveUserRoles(){
+      saving.value=true
+      try{
+        await api('/users/'+roleDialog.userId+'/roles',{method:'PUT',body:{role_ids:roleDialog.checked}})
+        roleDialog.visible=false
+        ElementPlus.ElMessage.success('分配成功')
+      }catch(e){ElementPlus.ElMessage.error(e.message)}
+      finally{saving.value=false}
+    }
+
+    // Roles
+    async function loadRoles(){
+      loading.value=true
+      try{const d=await api('/roles');roles.value=d.data.items}catch(e){}
+      finally{loading.value=false}
+    }
+    function showRoleForm(row){
+      if(row){roleFormDialog.isEdit=true;roleFormDialog.form={...row}}else{roleFormDialog.isEdit=false;roleFormDialog.form={name:'',code:'',description:''}}
+      roleFormDialog.visible=true
+    }
+    async function saveRole(){
+      saving.value=true
+      try{
+        if(roleFormDialog.isEdit)await api('/roles/'+roleFormDialog.form.id,{method:'PUT',body:roleFormDialog.form})
+        else await api('/roles',{method:'POST',body:roleFormDialog.form})
+        roleFormDialog.visible=false
+        loadRoles()
+        ElementPlus.ElMessage.success('保存成功')
+      }catch(e){ElementPlus.ElMessage.error(e.message)}
+      finally{saving.value=false}
+    }
+    async function delRole(id){
+      try{await api('/roles/'+id,{method:'DELETE'});loadRoles();ElementPlus.ElMessage.success('删除成功')}
+      catch(e){ElementPlus.ElMessage.error(e.message)}
+    }
+    async function showMenuAssign(row){
+      menuAssignDialog.roleId=row.id
+      menuAssignDialog.visible=true
+      await loadMenus()
+      try{
+        const r=await api('/roles/'+row.id+'/menus')
+        nextTick(()=>{if(menuTreeRef.value)menuTreeRef.value.setCheckedKeys(r.data||[])})
+      }catch(e){
+        nextTick(()=>{if(menuTreeRef.value)menuTreeRef.value.setCheckedKeys([])})
+      }
+    }
+    async function saveRoleMenus(){
+      saving.value=true
+      try{
+        const keys = menuTreeRef.value?menuTreeRef.value.getCheckedKeys():[]
+        await api('/roles/'+menuAssignDialog.roleId+'/menus',{method:'PUT',body:{menu_ids:keys}})
+        menuAssignDialog.visible=false
+        ElementPlus.ElMessage.success('分配成功')
+      }catch(e){ElementPlus.ElMessage.error(e.message)}
+      finally{saving.value=false}
+    }
+
+    // Menu Form
+    function showMenuForm(row){
+      if(row){menuFormDialog.isEdit=true;menuFormDialog.form={...row,parent_id:row.parent_id||null}}else{menuFormDialog.isEdit=false;menuFormDialog.form={parent_id:null,name:'',menu_type:'menu',path:'',permission_code:'',sort_order:0,is_visible:true}}
+      menuFormDialog.visible=true
+    }
+    async function saveMenu(){
+      saving.value=true
+      try{
+        if(menuFormDialog.isEdit)await api('/menus/'+menuFormDialog.form.id,{method:'PUT',body:menuFormDialog.form})
+        else await api('/menus',{method:'POST',body:menuFormDialog.form})
+        menuFormDialog.visible=false
+        loadMenus()
+        ElementPlus.ElMessage.success('保存成功')
+      }catch(e){ElementPlus.ElMessage.error(e.message)}
+      finally{saving.value=false}
+    }
+    async function delMenu(id){
+      try{await api('/menus/'+id,{method:'DELETE'});loadMenus();ElementPlus.ElMessage.success('删除成功')}
+      catch(e){ElementPlus.ElMessage.error(e.message)}
+    }
+
+    // Logs
+    async function loadLogs(page){
+      if(!page) page = currentLogPage.value
+      else currentLogPage.value = page
+      loading.value=true
+      try{
+        let url = '/logs?page='+page+'&page_size=10'
+        if(logFilter.username)url+='&username='+logFilter.username
+        if(logFilter.method)url+='&method='+logFilter.method
+        if(logFilter.status_code)url+='&status_code='+logFilter.status_code
+        const d=await api(url)
+        logs.value=d.data.items
+        logTotal.value=d.data.pagination.total
+      }catch(e){}
+      finally{loading.value=false}
+    }
+    function resetLogFilter(){
+      logFilter.username=''; logFilter.method=''; logFilter.status_code=null
+      currentLogPage.value=1
+      loadLogs(1)
+    }
+    async function showLogDetail(id){
+      try{const d=await api('/logs/'+id);logDetail.data=d.data;logDetail.visible=true}catch(e){ElementPlus.ElMessage.error(e.message)}
+    }
+    async function delLog(id){
+      try{
+        const r = await fetch(BASE+'/logs/'+id,{method:'DELETE',headers:{Authorization:'Bearer '+token.value}})
+        if(!r.ok){const d=await r.json().catch(()=>null);throw new Error(d?.message||r.statusText)}
+        ElementPlus.ElMessage.success('已移入回收站')
+        loadLogs()
+        loadRecycleLogs()
+      }catch(e){ElementPlus.ElMessage.error(e.message)}
+    }
+    async function loadRecycleLogs(page){
+      if(!page) page = recycleLogPage.value
+      else recycleLogPage.value = page
+      recycleLoading.value = true
+      try{
+        const d = await api('/logs/recycle-bin?page='+page+'&page_size=10')
+        recycleLogs.value = d.data.items
+        recycleLogTotal.value = d.data.pagination.total
+      }catch(e){}
+      finally{recycleLoading.value = false}
+    }
+    async function restoreLog(id){
+      try{
+        await api('/logs/'+id+'/restore',{method:'POST'})
+        ElementPlus.ElMessage.success('已恢复')
+        loadLogs(); loadRecycleLogs()
+      }catch(e){ElementPlus.ElMessage.error(e.message)}
+    }
+    async function permanentDelLog(id){
+      try{
+        await api('/logs/'+id+'/permanent',{method:'DELETE'})
+        ElementPlus.ElMessage.success('已彻底删除')
+        loadLogs(); loadRecycleLogs()
+      }catch(e){ElementPlus.ElMessage.error(e.message)}
+    }
+
+    // Files
+    async function loadFiles(page=1){
+      loading.value=true
+      try{const d=await api('/files?page='+page);files.value=d.data.items;fileTotal.value=d.data.pagination.total}catch(e){}
+      finally{loading.value=false}
+    }
+    async function uploadFile(req){
+      const form = new FormData()
+      form.append('file',req.file)
+      try{
+        const h = {Authorization:'Bearer '+token.value}
+        const r = await fetch(BASE+'/files/upload',{method:'POST',headers:h,body:form})
+        const d = await r.json()
+        if(d.code===200){ElementPlus.ElMessage.success('上传成功');loadFiles()}
+        else ElementPlus.ElMessage.error(d.message)
+      }catch(e){ElementPlus.ElMessage.error(e.message)}
+    }
+    function beforeUpload(file){
+      if(file.size>10*1024*1024){ElementPlus.ElMessage.error('文件大小不能超过10MB');return false}
+      return true
+    }
+    async function downloadFile(row){
+      try{
+        const r = await fetch(BASE+'/files/'+row.id+'/download',{headers:{Authorization:'Bearer '+token.value}})
+        if(!r.ok)throw new Error('Download failed')
+        const blob = await r.blob()
+        const url = URL.createObjectURL(blob)
+        const a=document.createElement('a')
+        a.href=url;a.download=row.original_name;a.click()
+        URL.revokeObjectURL(url)
+      }catch(e){ElementPlus.ElMessage.error(e.message)}
+    }
+    async function delFile(id){
+      try{await api('/files/'+id,{method:'DELETE'});loadFiles();ElementPlus.ElMessage.success('删除成功')}
+      catch(e){ElementPlus.ElMessage.error(e.message)}
+    }
+
+    // NL2SQL
+    async function runNl2sql(){
+      nl2sqlLoading.value=true
+      nl2sqlResult.value=null
+      nl2sqlError.value=''
+      try{
+        const d=await api('/ai/nl2sql?query='+encodeURIComponent(nl2sqlQuery.value),{method:'POST'})
+        nl2sqlResult.value=d.data
+      }catch(e){nl2sqlError.value=e.message}
+      nl2sqlLoading.value=false
+    }
+
+    // CodeGen
+    async function loadTables(){
+      try{const d=await api('/codegen/generate?table_name=users',{method:'POST'});codegenTables.value=['users','roles','menus','user_roles','role_menus','operation_logs','files','ai_conversations','nl2sql_queries']}catch(e){}
+    }
+    async function runCodegen(){
+      if(!codegenTable.value)return
+      try{const d=await api('/codegen/generate?table_name='+codegenTable.value,{method:'POST'});codegenResult.value=d.data}catch(e){}
+    }
+
+    // Log Analysis
+    async function loadLogAnalysisStats(){
+      try{
+        const d=await api('/ai/log-analysis/preview?hours='+logAnalysisHours.value)
+        if(d.data){
+          logAnalysisStats.total=d.data.total||0
+          logAnalysisStats.errors=d.data.errors||0
+          logAnalysisStats.avgDuration=d.data.avg_duration||0
+        }
+      }catch(e){}
+    }
+    async function runLogAnalysis(){
+      logAnalysisLoading.value=true
+      logAnalysisResult.value=''
+      try{
+        const r = await fetch(BASE+'/ai/log-analysis?hours='+logAnalysisHours.value,{method:'POST',headers:{Authorization:'Bearer '+token.value}})
+        if(!r.ok){logAnalysisResult.value='HTTP错误: '+r.status;logAnalysisLoading.value=false;return}
+        const text = await r.text()
+        const lines = text.split('\n')
+        for(const l of lines){
+          if(!l.startsWith('data: '))continue
+          try{const j=JSON.parse(l.slice(6))
+            if(j.type==='stats'){
+              logAnalysisStats.total=j.total||0
+              logAnalysisStats.errors=j.errors||0
+              logAnalysisStats.avgDuration=j.avg_duration||0
+            }else if(j.type==='token'){
+              logAnalysisResult.value+=j.content
+            }
+          }catch(e){}
+        }
+        if(!logAnalysisResult.value)logAnalysisResult.value='(无结果)'
+      }catch(e){logAnalysisResult.value='错误: '+e.message}
+      logAnalysisLoading.value=false
+    }
+
+    function onMenuSelect(index){
+      currentMenu.value=index
+      currentPage.value=index
+      if(index==='dashboard')loadDashboard()
+      else if(index==='/system/users')loadUsers()
+      else if(index==='/system/roles')loadRoles()
+      else if(index==='/system/menus')loadMenus()
+      else if(index==='/monitor/logs'){loadLogs();loadRecycleLogs()}
+      else if(index==='/monitor/files')loadFiles()
+      else if(index==='/ai/codegen')loadTables()
+      else if(index==='/ai/chat')loadChatHistory()
+      else if(index==='/ai/log-analysis')loadLogAnalysisStats()
+    }
+
+    function formatTime(t){
+      if(!t)return '-'
+      try{
+        const d=new Date(t)
+        if(isNaN(d.getTime()))return t
+        return d.toLocaleString('zh-CN',{hour12:false})
+      }catch(e){return t}
+    }
+
+    // Init
+    if(token.value){
+      loadMenus().then(()=>{
+        loadDashboard()
+      })
+    }
+
+    return{
+      token,username,isSuperuser,loginForm,loginRules,loginRef,loginLoading,doLogin,doLogout,onUserCommand,
+      profileDialog,showProfile,saveProfile,changeMyPassword,
+      menus,flatMenus,currentMenu,currentPage,onMenuSelect,
+      stats,loading,saving,
+      users,userTotal,userSearch,loadUsers,showUserDialog,saveUser,delUser,userDialog,
+      roles,allRoles,loadRoles,showRoleForm,saveRole,delRole,roleDialog,showRoleDialog,saveUserRoles,roleFormDialog,
+      menuAssignDialog,showMenuAssign,saveRoleMenus,menuTreeRef,
+      menuFormDialog,showMenuForm,saveMenu,delMenu,
+      logMethods,logStatusCodes,logs,logTotal,currentLogPage,logFilter,loadLogs,resetLogFilter,showLogDetail,delLog,logDetail,recycleLogs,recycleLogTotal,recycleLogPage,recycleLoading,loadRecycleLogs,restoreLog,permanentDelLog,
+      files,fileTotal,loadFiles,uploadFile,beforeUpload,downloadFile,delFile,
+      chatMsgs,chatInput,chatSession,chatLoading,sendChat,clearChat,loadChatHistory,
+      attachedFiles,filePickerVisible,filePickerList,filePickerTotal,filePickerSearch,
+      filePickerSelected,filteredFilePickerList,filePickerTableRef: ref(null),
+      loadFilePickerList,openFilePicker,confirmFilePicker,onFilePickerSelect,
+      chatDropActive,isImageFile,onChatDrop,
+      nl2sqlQuery,nl2sqlResult,nl2sqlError,nl2sqlLoading,runNl2sql,
+      codegenTables,codegenTable,codegenResult,runCodegen,
+      logAnalysisHours,logAnalysisResult,logAnalysisLoading,logAnalysisStats,loadLogAnalysisStats,runLogAnalysis,formatTime,
+    }
+  }
+})
+
+for(const [name,c] of Object.entries(ElementPlusIconsVue)){app.component(name,c)}
+app.use(ElementPlus)
+app.mount('#app')
+</script>
+</body>
+</html>

@@ -1,0 +1,55 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: aiadmin-db
+    environment:
+      POSTGRES_USER: aiadmin
+      POSTGRES_PASSWORD: aiadmin123
+      POSTGRES_DB: aiadmin
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aiadmin"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: aiadmin-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    container_name: aiadmin-app
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=aiadmin
+      - DB_PASSWORD=aiadmin123
+      - DB_NAME=aiadmin
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET_KEY=change-me-jwt-secret-in-production
+      - SECRET_KEY=change-me-secret-key-in-production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  pgdata:
