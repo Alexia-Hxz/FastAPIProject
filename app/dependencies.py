@@ -15,7 +15,9 @@ def parse_uuid(value: str, field_name: str = "id") -> uuid.UUID:
         raise BadRequestError(f"Invalid {field_name} format")
 
 
-async def get_token_from_header(authorization: str = Header(...)) -> str:
+async def get_token_from_header(authorization: str | None = Header(None)) -> str:
+    if not authorization:
+        raise UnauthorizedError("Missing authorization header")
     if not authorization.startswith("Bearer "):
         raise UnauthorizedError("Invalid authorization header")
     token = authorization[7:]

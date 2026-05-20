@@ -49,7 +49,7 @@ async def ai_chat(
         async def event_stream():
             done_content = None
             try:
-                async for line in AIService.chat(current_user.id, body.session_id, body.message, body.file_ids):
+                async for line in AIService.chat(current_user.id, body.session_id, body.message, body.file_ids, current_user):
                     yield f"data: {line}\n\n"
                     if done_content is None:
                         try:
@@ -75,7 +75,7 @@ async def ai_chat(
 
     try:
         full_reply = ""
-        async for line in AIService.chat(current_user.id, body.session_id, body.message, body.file_ids):
+        async for line in AIService.chat(current_user.id, body.session_id, body.message, body.file_ids, current_user):
             try:
                 d = json.loads(line.strip())
                 if d.get("type") == "token":

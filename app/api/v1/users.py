@@ -36,6 +36,33 @@ async def create_user(
         return ResponseModel(code=400, message=str(e), data=None)
 
 
+@router.get("/{user_id}/roles", response_model=ResponseModel[list[str]])
+async def get_user_roles(
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_permission("user:read")),
+):
+    user = await UserService.get_by_id(db, parse_uuid(user_id))
+    if not user:
+        return ResponseModel(code=404, message="User not found", data=None)
+    role_ids = [str(r.id) for r in user.roles]
+    return ResponseModel(data=role_ids)
+
+
+@router.put("/{user_id}/roles", response_model=ResponseModel)
+async def assign_user_roles(
+    user_id: str,
+    data: UserRoleAssign,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_permission("user:assign")),
+):
+    user = await UserService.get_by_id(db, parse_uuid(user_id))
+    if not user:
+        return ResponseModel(code=404, message="User not found", data=None)
+    await UserService.assign_roles(db, user, data.role_ids)
+    return ResponseModel(message="Roles assigned")
+
+
 @router.get("/{user_id}", response_model=ResponseModel[UserResponse])
 async def get_user(
     user_id: str,
@@ -73,17 +100,3 @@ async def delete_user(
         return ResponseModel(code=404, message="User not found", data=None)
     await UserService.delete(db, user)
     return ResponseModel(message="User deleted")
-
-
-@router.put("/{user_id}/roles", response_model=ResponseModel)
-async def assign_user_roles(
-    user_id: str,
-    data: UserRoleAssign,
-    db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_permission("user:assign")),
-):
-    user = await UserService.get_by_id(db, parse_uuid(user_id))
-    if not user:
-        return ResponseModel(code=404, message="User not found", data=None)
-    await UserService.assign_roles(db, user, data.role_ids)
-    return ResponseModel(message="Roles assigned")

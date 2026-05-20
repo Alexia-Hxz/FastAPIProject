@@ -51,7 +51,7 @@ body{margin:0;font-family:system-ui,-apple-system,sans-serif}
           <el-input v-model="loginForm.username" placeholder="用户名" size="large" prefix-icon="User"></el-input>
         </el-form-item>
         <el-form-item prop="password">
-          <el-input v-model="loginForm.password" type="password" placeholder="密码" size="large" prefix-icon="Lock" @keyup.enter="doLogin"></el-input>
+          <el-input v-model="loginForm.password" type="password" placeholder="密码" size="large" prefix-icon="Lock" show-password @keyup.enter="doLogin"></el-input>
         </el-form-item>
         <el-button type="primary" size="large" style="width:100%" @click="doLogin" :loading="loginLoading">登 录</el-button>
       </el-form>
@@ -110,7 +110,7 @@ body{margin:0;font-family:system-ui,-apple-system,sans-serif}
               <h3 style="margin:0">用户管理</h3>
               <div style="display:flex;gap:8px">
                 <el-input v-model="userSearch" placeholder="搜索用户名/昵称/邮箱" style="width:240px" clearable @clear="loadUsers" @keyup.enter="loadUsers"></el-input>
-                <el-button type="primary" @click="showUserDialog(null)">新增用户</el-button>
+                <el-button type="primary" @click="showUserDialog(null)" v-if="hasPerm('user:create')">新增用户</el-button>
               </div>
             </div>
             <el-table :data="users" stripe v-loading="loading">
@@ -120,9 +120,9 @@ body{margin:0;font-family:system-ui,-apple-system,sans-serif}
               <el-table-column prop="phone" label="手机"></el-table-column>
               <el-table-column prop="is_active" label="状态" width="80"><template #default="{row}"><el-tag :type="row.is_active?'success':'danger'" size="small">{{row.is_active?'启用':'禁用'}}</el-tag></template></el-table-column>
               <el-table-column label="操作" width="200"><template #default="{row}">
-                <el-button size="small" @click="showUserDialog(row)">编辑</el-button>
-                <el-button size="small" @click="showRoleDialog(row)">角色</el-button>
-                <el-popconfirm title="确定删除?" @confirm="delUser(row.id)"><template #reference><el-button size="small" type="danger">删除</el-button></template></el-popconfirm>
+                <el-button size="small" @click="showUserDialog(row)" v-if="hasPerm('user:update')">编辑</el-button>
+                <el-button size="small" @click="showRoleDialog(row)" v-if="hasPerm('user:assign')">角色</el-button>
+                <el-popconfirm title="确定删除?" @confirm="delUser(row.id)" v-if="hasPerm('user:delete')"><template #reference><el-button size="small" type="danger">删除</el-button></template></el-popconfirm>
               </template></el-table-column>
             </el-table>
             <el-pagination style="margin-top:16px;justify-content:flex-end" layout="total,prev,pager,next" :total="userTotal" :page-size="10" @current-change="p=>loadUsers(p)"/>
@@ -134,16 +134,15 @@ body{margin:0;font-family:system-ui,-apple-system,sans-serif}
           <div class="card-box">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
               <h3 style="margin:0">角色管理</h3>
-              <el-button type="primary" @click="showRoleForm(null)">新增角色</el-button>
+              <el-button type="primary" @click="showRoleForm(null)" v-if="hasPerm('role:create')">新增角色</el-button>
             </div>
             <el-table :data="roles" stripe v-loading="loading">
               <el-table-column prop="name" label="角色名" width="150"></el-table-column>
               <el-table-column prop="code" label="编码" width="120"></el-table-column>
               <el-table-column prop="description" label="描述"></el-table-column>
               <el-table-column label="操作" width="220"><template #default="{row}">
-                <el-button size="small" @click="showRoleForm(row)">编辑</el-button>
-                <el-button size="small" @click="showMenuAssign(row)">分配菜单</el-button>
-                <el-popconfirm title="确定删除?" @confirm="delRole(row.id)"><template #reference><el-button size="small" type="danger">删除</el-button></template></el-popconfirm>
+                <el-button size="small" @click="showRoleForm(row)" v-if="hasPerm('role:update')">编辑</el-button>
+                <el-popconfirm title="确定删除?" @confirm="delRole(row.id)" v-if="hasPerm('role:delete')"><template #reference><el-button size="small" type="danger">删除</el-button></template></el-popconfirm>
               </template></el-table-column>
             </el-table>
           </div>
@@ -154,7 +153,7 @@ body{margin:0;font-family:system-ui,-apple-system,sans-serif}
           <div class="card-box">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
               <h3 style="margin:0">菜单管理</h3>
-              <el-button type="primary" @click="showMenuForm(null)">新增菜单</el-button>
+              <el-button type="primary" @click="showMenuForm(null)" v-if="hasPerm('menu:create')">新增菜单</el-button>
             </div>
             <el-table :data="menus" stripe row-key="id" default-expand-all v-loading="loading">
               <el-table-column prop="name" label="名称" width="200"></el-table-column>
@@ -163,8 +162,8 @@ body{margin:0;font-family:system-ui,-apple-system,sans-serif}
               <el-table-column prop="permission_code" label="权限码"></el-table-column>
               <el-table-column prop="sort_order" label="排序" width="70"></el-table-column>
               <el-table-column label="操作" width="180"><template #default="{row}">
-                <el-button size="small" @click="showMenuForm(row)">编辑</el-button>
-                <el-popconfirm title="确定删除?" @confirm="delMenu(row.id)"><template #reference><el-button size="small" type="danger">删除</el-button></template></el-popconfirm>
+                <el-button size="small" @click="showMenuForm(row)" v-if="hasPerm('menu:update')">编辑</el-button>
+                <el-popconfirm title="确定删除?" @confirm="delMenu(row.id)" v-if="hasPerm('menu:delete')"><template #reference><el-button size="small" type="danger">删除</el-button></template></el-popconfirm>
               </template></el-table-column>
             </el-table>
           </div>
@@ -194,8 +193,8 @@ body{margin:0;font-family:system-ui,-apple-system,sans-serif}
               <el-table-column prop="duration_ms" label="耗时(ms)" width="90"></el-table-column>
               <el-table-column prop="created_at" label="时间" width="170"><template #default="{row}">{{formatTime(row.created_at)}}</template></el-table-column>
               <el-table-column label="操作" width="160"><template #default="{row}">
-                <el-button size="small" @click="showLogDetail(row.id)">详情</el-button>
-                <el-popconfirm title="移入回收站?" @confirm="delLog(row.id)"><template #reference><el-button size="small" type="warning">回收</el-button></template></el-popconfirm>
+                <el-button size="small" @click="showLogDetail(row.id)" v-if="hasPerm('log:read')">详情</el-button>
+                <el-popconfirm title="移入回收站?" @confirm="delLog(row.id)" v-if="hasPerm('log:read')"><template #reference><el-button size="small" type="warning">回收</el-button></template></el-popconfirm>
               </template></el-table-column>
             </el-table>
             <el-pagination style="margin-top:16px;justify-content:flex-end" layout="total,prev,pager,next" :total="logTotal" :page-size="10" :current-page="currentLogPage" @current-change="p=>loadLogs(p)"/>
@@ -213,8 +212,8 @@ body{margin:0;font-family:system-ui,-apple-system,sans-serif}
               <el-table-column prop="deleted_at" label="删除时间" width="170"><template #default="{row}">{{formatTime(row.deleted_at)}}</template></el-table-column>
               <el-table-column prop="deleted_by" label="删除人" width="100"></el-table-column>
               <el-table-column label="操作" width="200"><template #default="{row}">
-                <el-button size="small" type="success" @click="restoreLog(row.id)">恢复</el-button>
-                <el-popconfirm title="彻底删除?无法恢复!" @confirm="permanentDelLog(row.id)"><template #reference><el-button size="small" type="danger">彻底删除</el-button></template></el-popconfirm>
+                <el-button size="small" type="success" @click="restoreLog(row.id)" v-if="hasPerm('log:read')">恢复</el-button>
+                <el-popconfirm title="彻底删除?无法恢复!" @confirm="permanentDelLog(row.id)" v-if="hasPerm('log:read')"><template #reference><el-button size="small" type="danger">彻底删除</el-button></template></el-popconfirm>
               </template></el-table-column>
             </el-table>
             <el-pagination style="margin-top:16px;justify-content:flex-end" layout="total,prev,pager,next" :total="recycleLogTotal" :page-size="10" :current-page="recycleLogPage" @current-change="p=>loadRecycleLogs(p)"/>
@@ -227,7 +226,7 @@ body{margin:0;font-family:system-ui,-apple-system,sans-serif}
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
               <h3 style="margin:0">文件管理</h3>
               <el-upload :show-file-list="false" :http-request="uploadFile" :before-upload="beforeUpload">
-                <el-button type="primary">上传文件</el-button>
+                <el-button type="primary" v-if="hasPerm('file:upload')">上传文件</el-button>
               </el-upload>
             </div>
             <el-table :data="files" stripe v-loading="loading">
@@ -237,8 +236,8 @@ body{margin:0;font-family:system-ui,-apple-system,sans-serif}
               <el-table-column prop="download_count" label="下载次数" width="100"></el-table-column>
               <el-table-column prop="created_at" label="上传时间" width="170"></el-table-column>
               <el-table-column label="操作" width="160"><template #default="{row}">
-                <el-button size="small" @click="downloadFile(row)">下载</el-button>
-                <el-popconfirm title="确定删除?" @confirm="delFile(row.id)"><template #reference><el-button size="small" type="danger">删除</el-button></template></el-popconfirm>
+                <el-button size="small" @click="downloadFile(row)" v-if="hasPerm('file:download')">下载</el-button>
+                <el-popconfirm title="确定删除?" @confirm="delFile(row.id)" v-if="hasPerm('file:delete')"><template #reference><el-button size="small" type="danger">删除</el-button></template></el-popconfirm>
               </template></el-table-column>
             </el-table>
             <el-pagination style="margin-top:16px;justify-content:flex-end" layout="total,prev,pager,next" :total="fileTotal" :page-size="10" @current-change="p=>loadFiles(p)"/>
@@ -386,11 +385,12 @@ body{margin:0;font-family:system-ui,-apple-system,sans-serif}
   <el-dialog v-model="userDialog.visible" :title="userDialog.isEdit?'编辑用户':'新增用户'" width="480px">
     <el-form :model="userDialog.form" label-width="80px">
       <el-form-item label="用户名"><el-input v-model="userDialog.form.username" :disabled="userDialog.isEdit"></el-input></el-form-item>
-      <el-form-item label="密码"><el-input v-model="userDialog.form.password" type="password" :placeholder="userDialog.isEdit?'留空不修改':''"></el-input></el-form-item>
+      <el-form-item label="密码"><el-input v-model="userDialog.form.password" type="password" :placeholder="userDialog.isEdit?'留空不修改':''" show-password></el-input></el-form-item>
       <el-form-item label="昵称"><el-input v-model="userDialog.form.nickname"></el-input></el-form-item>
       <el-form-item label="邮箱"><el-input v-model="userDialog.form.email"></el-input></el-form-item>
       <el-form-item label="手机"><el-input v-model="userDialog.form.phone"></el-input></el-form-item>
       <el-form-item label="状态"><el-switch v-model="userDialog.form.is_active"/></el-form-item>
+      <el-form-item label="角色"><el-checkbox-group v-model="userDialog.roleIds"><el-checkbox v-for="r in allRoles" :key="r.id" :label="r.id" :value="r.id">{{r.name}}</el-checkbox></el-checkbox-group></el-form-item>
     </el-form>
     <template #footer><el-button @click="userDialog.visible=false">取消</el-button><el-button type="primary" @click="saveUser" :loading="saving">保存</el-button></template>
   </el-dialog>
@@ -404,19 +404,14 @@ body{margin:0;font-family:system-ui,-apple-system,sans-serif}
   </el-dialog>
 
   <!-- Role Form Dialog -->
-  <el-dialog v-model="roleFormDialog.visible" :title="roleFormDialog.isEdit?'编辑角色':'新增角色'" width="450px">
+  <el-dialog v-model="roleFormDialog.visible" :title="roleFormDialog.isEdit?'编辑角色':'新增角色'" width="500px">
     <el-form :model="roleFormDialog.form" label-width="80px">
       <el-form-item label="名称"><el-input v-model="roleFormDialog.form.name"></el-input></el-form-item>
       <el-form-item label="编码"><el-input v-model="roleFormDialog.form.code" :disabled="roleFormDialog.isEdit"></el-input></el-form-item>
       <el-form-item label="描述"><el-input v-model="roleFormDialog.form.description"></el-input></el-form-item>
+      <el-form-item label="菜单权限"><el-tree :data="menus" show-checkbox node-key="id" ref="roleMenuTreeRef" :props="{label:'name',children:'children'}"></el-tree></el-form-item>
     </el-form>
     <template #footer><el-button @click="roleFormDialog.visible=false">取消</el-button><el-button type="primary" @click="saveRole" :loading="saving">保存</el-button></template>
-  </el-dialog>
-
-  <!-- Menu Assign Dialog -->
-  <el-dialog v-model="menuAssignDialog.visible" title="分配菜单权限" width="400px">
-    <el-tree :data="menus" show-checkbox node-key="id" default-checked-keys="" ref="menuTreeRef" :props="{label:'name',children:'children'}"></el-tree>
-    <template #footer><el-button @click="menuAssignDialog.visible=false">取消</el-button><el-button type="primary" @click="saveRoleMenus" :loading="saving">保存</el-button></template>
   </el-dialog>
 
   <!-- Menu Form Dialog -->
@@ -520,6 +515,18 @@ const app = createApp({
       const flatten = (items)=>{let r=[];for(let i of items){if(i.menu_type==='menu'&&i.is_visible){r.push({...i,children:i.children?flatten(i.children):[]})}}return r}
       return flatten(menus.value)
     })
+    const userPerms = computed(()=>{
+      const perms = new Set()
+      const collect = (items)=>{
+        for(let i of items){
+          if(i.permission_code) perms.add(i.permission_code)
+          if(i.children) collect(i.children)
+        }
+      }
+      collect(menus.value)
+      return perms
+    })
+    function hasPerm(code){ return userPerms.value.has(code) }
     const currentMenu = ref('dashboard')
     const currentPage = ref('dashboard')
 
@@ -530,17 +537,15 @@ const app = createApp({
     const users = ref([])
     const userTotal = ref(0)
     const userSearch = ref('')
-    const userDialog = reactive({visible:false,isEdit:false,form:{username:'',password:'',nickname:'',email:'',phone:'',is_active:true}})
+    const userDialog = reactive({visible:false,isEdit:false,form:{username:'',password:'',nickname:'',email:'',phone:'',is_active:true},roleIds:[]})
 
     // Roles
     const roles = ref([])
     const allRoles = ref([])
     const roleDialog = reactive({visible:false,userId:null,checked:[]})
-    const roleFormDialog = reactive({visible:false,isEdit:false,form:{name:'',code:'',description:''}})
+    const roleFormDialog = reactive({visible:false,isEdit:false,form:{name:'',code:'',description:''},menuIds:[]})
 
-    // Menu assign
-    const menuAssignDialog = reactive({visible:false,roleId:null})
-    const menuTreeRef = ref(null)
+    const roleMenuTreeRef = ref(null)
     const menuFormDialog = reactive({visible:false,isEdit:false,form:{parent_id:null,name:'',menu_type:'menu',path:'',permission_code:'',sort_order:0,is_visible:true}})
 
     // Profile
@@ -551,11 +556,16 @@ const app = createApp({
     })
 
     // Logs
-    const logMethods = ['GET', 'POST', 'PUT', 'DELETE']
+    const logMethods = ['GET', 'POST', 'PUT']
     const logStatusCodes = [
       {label:'200 成功', value:200},
       {label:'400 请求错误', value:400},
+      {label:'401 未认证', value:401},
       {label:'403 禁止访问', value:403},
+      {label:'404 未找到', value:404},
+      {label:'409 冲突', value:409},
+      {label:'422 参数校验失败', value:422},
+      {label:'429 请求过多', value:429},
       {label:'500 服务器错误', value:500}
     ]
     const logs = ref([])
@@ -845,12 +855,20 @@ const app = createApp({
       finally{loading.value=false}
     }
     function showUserDialog(row){
+      // Load all roles for the checkbox list
+      api('/roles/all').then(d=>{allRoles.value=d.data||[]}).catch(()=>{})
       if(row){
         userDialog.isEdit=true
         userDialog.form={...row,password:''}
+        userDialog.roleIds=[]
+        // Load user's existing roles
+        api('/users/'+row.id+'/roles').then(d=>{
+          userDialog.roleIds=d.data||[]
+        }).catch(()=>{})
       }else{
         userDialog.isEdit=false
         userDialog.form={username:'',password:'',nickname:'',email:'',phone:'',is_active:true}
+        userDialog.roleIds=[]
       }
       userDialog.visible=true
     }
@@ -859,8 +877,15 @@ const app = createApp({
       try{
         const body = {...userDialog.form}
         if(userDialog.isEdit){if(!body.password)delete body.password;delete body.username}
-        if(userDialog.isEdit)await api('/users/'+userDialog.form.id,{method:'PUT',body})
-        else await api('/users',{method:'POST',body})
+        let userId = userDialog.form.id
+        if(userDialog.isEdit){
+          await api('/users/'+userId,{method:'PUT',body})
+        }else{
+          const d = await api('/users',{method:'POST',body})
+          userId = d.data.id
+        }
+        // Assign roles
+        await api('/users/'+userId+'/roles',{method:'PUT',body:{role_ids:userDialog.roleIds}})
         userDialog.visible=false
         loadUsers()
         ElementPlus.ElMessage.success('保存成功')
@@ -899,14 +924,35 @@ const app = createApp({
       finally{loading.value=false}
     }
     function showRoleForm(row){
-      if(row){roleFormDialog.isEdit=true;roleFormDialog.form={...row}}else{roleFormDialog.isEdit=false;roleFormDialog.form={name:'',code:'',description:''}}
+      if(row){
+        roleFormDialog.isEdit=true
+        roleFormDialog.form={...row}
+        // Load existing menu assignments
+        api('/roles/'+row.id+'/menus').then(d=>{
+          roleFormDialog.menuIds=d.data||[]
+          nextTick(()=>{if(roleMenuTreeRef.value)roleMenuTreeRef.value.setCheckedKeys(roleFormDialog.menuIds)})
+        }).catch(()=>{})
+      }else{
+        roleFormDialog.isEdit=false
+        roleFormDialog.form={name:'',code:'',description:''}
+        roleFormDialog.menuIds=[]
+        nextTick(()=>{if(roleMenuTreeRef.value)roleMenuTreeRef.value.setCheckedKeys([])})
+      }
       roleFormDialog.visible=true
     }
     async function saveRole(){
       saving.value=true
       try{
-        if(roleFormDialog.isEdit)await api('/roles/'+roleFormDialog.form.id,{method:'PUT',body:roleFormDialog.form})
-        else await api('/roles',{method:'POST',body:roleFormDialog.form})
+        let roleId = roleFormDialog.form.id
+        if(roleFormDialog.isEdit){
+          await api('/roles/'+roleId,{method:'PUT',body:roleFormDialog.form})
+        }else{
+          const d = await api('/roles',{method:'POST',body:roleFormDialog.form})
+          roleId = d.data.id
+        }
+        // Assign menus
+        const menuIds = roleMenuTreeRef.value?roleMenuTreeRef.value.getCheckedKeys():[]
+        await api('/roles/'+roleId+'/menus',{method:'PUT',body:{menu_ids:menuIds}})
         roleFormDialog.visible=false
         loadRoles()
         ElementPlus.ElMessage.success('保存成功')
@@ -917,28 +963,6 @@ const app = createApp({
       try{await api('/roles/'+id,{method:'DELETE'});loadRoles();ElementPlus.ElMessage.success('删除成功')}
       catch(e){ElementPlus.ElMessage.error(e.message)}
     }
-    async function showMenuAssign(row){
-      menuAssignDialog.roleId=row.id
-      menuAssignDialog.visible=true
-      await loadMenus()
-      try{
-        const r=await api('/roles/'+row.id+'/menus')
-        nextTick(()=>{if(menuTreeRef.value)menuTreeRef.value.setCheckedKeys(r.data||[])})
-      }catch(e){
-        nextTick(()=>{if(menuTreeRef.value)menuTreeRef.value.setCheckedKeys([])})
-      }
-    }
-    async function saveRoleMenus(){
-      saving.value=true
-      try{
-        const keys = menuTreeRef.value?menuTreeRef.value.getCheckedKeys():[]
-        await api('/roles/'+menuAssignDialog.roleId+'/menus',{method:'PUT',body:{menu_ids:keys}})
-        menuAssignDialog.visible=false
-        ElementPlus.ElMessage.success('分配成功')
-      }catch(e){ElementPlus.ElMessage.error(e.message)}
-      finally{saving.value=false}
-    }
-
     // Menu Form
     function showMenuForm(row){
       if(row){menuFormDialog.isEdit=true;menuFormDialog.form={...row,parent_id:row.parent_id||null}}else{menuFormDialog.isEdit=false;menuFormDialog.form={parent_id:null,name:'',menu_type:'menu',path:'',permission_code:'',sort_order:0,is_visible:true}}
@@ -1146,11 +1170,11 @@ const app = createApp({
     return{
       token,username,isSuperuser,loginForm,loginRules,loginRef,loginLoading,doLogin,doLogout,onUserCommand,
       profileDialog,showProfile,saveProfile,changeMyPassword,
-      menus,flatMenus,currentMenu,currentPage,onMenuSelect,
+      menus,flatMenus,currentMenu,currentPage,onMenuSelect,hasPerm,
       stats,loading,saving,
       users,userTotal,userSearch,loadUsers,showUserDialog,saveUser,delUser,userDialog,
       roles,allRoles,loadRoles,showRoleForm,saveRole,delRole,roleDialog,showRoleDialog,saveUserRoles,roleFormDialog,
-      menuAssignDialog,showMenuAssign,saveRoleMenus,menuTreeRef,
+      roleMenuTreeRef,
       menuFormDialog,showMenuForm,saveMenu,delMenu,
       logMethods,logStatusCodes,logs,logTotal,currentLogPage,logFilter,loadLogs,resetLogFilter,showLogDetail,delLog,logDetail,recycleLogs,recycleLogTotal,recycleLogPage,recycleLoading,loadRecycleLogs,restoreLog,permanentDelLog,
       files,fileTotal,loadFiles,uploadFile,beforeUpload,downloadFile,delFile,

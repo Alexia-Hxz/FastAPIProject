@@ -15,7 +15,7 @@ from app.models.operation_log import OperationLog
 logger = logging.getLogger(__name__)
 
 
-SYSTEM_PROMPT = (
+BASE_SYSTEM_PROMPT = (
     "You are a helpful AI assistant integrated into 'AI-Admin', an admin management system. "
     "You can answer general questions (math, knowledge, casual conversation) as well as help with:\n"
     "1. Understanding system features and how to use them\n"
@@ -47,17 +47,35 @@ class AIService:
         )
 
     @staticmethod
+    def _build_user_context(user) -> str:
+        """Build user identity context injected into system prompt."""
+        roles = [r.name for r in user.roles] if user.roles else []
+        role_str = f", 拥有角色: {', '.join(roles)}" if roles else ""
+        super_str = "是超级管理员, " if user.is_superuser else ""
+        return (
+            f"当前对话用户身份（这是系统提供的确切信息, 回答涉及用户身份的问题时必须以此为准）:\n"
+            f"  用户名: {user.username}\n"
+            f"  身份: {super_str}角色: {roles if roles else '无'}\n"
+        )
+
+    @staticmethod
     async def chat(
         user_id: uuid.UUID,
         session_id: str,
         message: str,
         file_ids: list[str] | None = None,
+        current_user=None,
     ) -> AsyncGenerator[str, None]:
         from app.core.database import async_session as chat_session
 
         client = AIService._get_client()
 
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        if current_user is not None:
+            system_prompt = AIService._build_user_context(current_user) + "\n" + BASE_SYSTEM_PROMPT
+        else:
+            system_prompt = BASE_SYSTEM_PROMPT
+
+        messages = [{"role": "system", "content": system_prompt}]
 
         try:
             async with chat_session() as db:

@@ -54,7 +54,10 @@ pip install -r requirements.txt
 cp .env.example .env
 
 # 4. 初始化数据库
+# Linux/Mac:
 python scripts/seed.py
+# Windows (PowerShell):
+$env:PYTHONPATH="."; python scripts/seed.py
 
 # 5. 启动开发服务器
 uvicorn app.main:app --reload
