@@ -63,7 +63,7 @@ body{margin:0;font-family:system-ui,-apple-system,sans-serif}
   <div v-else class="layout">
     <!-- Sidebar -->
     <div class="sidebar">
-      <div class="logo">⚡ AI-Admin</div>
+      <div class="logo" style="cursor:pointer" @click="currentPage='dashboard';loadDashboard()">⚡ AI-Admin</div>
       <el-menu :default-active="currentMenu" background-color="#1d1e2c" text-color="#a0a0b0" active-text-color="#fff" @select="onMenuSelect" style="border-right:none">
         <template v-for="m in flatMenus" :key="m.path">
           <el-menu-item :index="m.path" v-if="!m.children || !m.children.length" style="padding-left:40px!important">
