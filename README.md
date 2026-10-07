@@ -2,6 +2,11 @@
 
 基于 FastAPI 的全异步后台管理系统框架，集成 LLM 实现 NL2SQL 自然语言数据查询和 AI 操作助手。
 
+![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-async-009688?logo=fastapi&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 ## 功能
 
 - **认证授权**: JWT 双 Token + Redis 黑名单
@@ -138,6 +143,33 @@ app/
 └── middleware/       # 中间件
 ```
 
+## 架构与安全设计
+
+```
+请求 → CORS → 限流（rate_limit）→ 操作日志（operation_log）
+     → 依赖注入（dependencies：当前用户 / 权限码校验）
+     → 路由层 api/v1 → 服务层 services → ORM（SQLAlchemy 2.0 async）
+                                        ↕  PostgreSQL 16 / Redis 7
+```
+
+- **认证**：JWT Access + Refresh 双 Token，登出写入 Redis 黑名单，实现即时失效
+- **授权**：用户 → 角色 → 菜单/权限码 三级 RBAC，权限校验在路由入口通过依赖注入完成
+- **NL2SQL 安全链路**：自然语言 → LLM 生成 SQL → **sqlglot 解析校验**（仅允许只读语句，拦截多语句与危险关键字）→ 参数化执行 → 结构化结果，不让模型直接对数据库说话
+- **AI 助手**：SSE 流式输出，支持对话历史与智能日志分析
+- **可观测性**：操作日志中间件自动记录请求关键信息，支持多条件筛选
+
+## 截图
+
+<!-- 截图待上传：把 PNG 放进 docs/screenshots/ 后取消下面的注释 -->
+<!--
+![接口文档](docs/screenshots/01-docs.png)
+![NL2SQL 查询](docs/screenshots/02-nl2sql.png)
+![RBAC 权限管理](docs/screenshots/03-rbac.png)
+-->
+
+## 安全提示
+
+仓库中的数据库密码（示例值 aiadmin123）与默认管理员账号（admin / admin123）**仅供本地演示**；部署到公开环境前必须修改为独立密钥与强口令。
 ## 测试
 
 ```bash
